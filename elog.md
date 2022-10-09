@@ -19,7 +19,6 @@ sendSOAPRequest(url, payload)
 
 Az ELog domaint a `php/config.php` fájlban lévő globális `$config ['elog_domain']` változó állítja be.
 
-
 ### Cikkszámok tükrözése
 
 A cikkszámok lekérdezése a `ItemGetList3` nevű SOAP metóduson keresztül történik. 1 db `Filters` nevű paramétert vár,
@@ -108,7 +107,7 @@ szerepelnek az ELog rendszerében.
 
 A lekérdezés sikeressége/sikertelensége a felhasználói naplóban megtekinthető és a következő formátumban olvasható:
 
-```mysql
+```
 2022-09-20 18:59:05 - ELog: cikkszám szinkronizáció befejeződött. Összesen: 38395 db cikkszám szinkronizálva.
 2022-09-20 18:58:53 - ELog: XXXXX-es projekt cikkszámainak lekérése.
 2022-09-20 18:58:52 - ELog: cikkszám szinkronizáció megkezdődött.
@@ -117,7 +116,7 @@ A lekérdezés sikeressége/sikertelensége a felhasználói naplóban megtekint
 A cikkszámok a következő táblában vannak tárolva ahol az `id` (ELog: ItemId) a kulcs:
 
 ```mysql
-CREATE TABLE `elog_cikkszam`
+CREATE TABLE `szerelveny_elog`
 (
     `id`        bigint(20)                                NOT NULL,
     `item_code` varchar(32) COLLATE utf8mb4_hungarian_ci  NOT NULL,
@@ -130,9 +129,25 @@ CREATE TABLE `elog_cikkszam`
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_hungarian_ci;
 
-ALTER TABLE `elog_cikkszam`
+ALTER TABLE `szerelveny_elog`
     ADD PRIMARY KEY (`id`);
 ```
+
+### Szerelvények társitása/módositása a DVB rendszer felületén:
+
+A szerelvény társitása az adott elemtipushoz a következőképpen módosult. A `szerepel az adatbázisban` checkbox alapértelmezetten ki van jelölve. Ez azt jelenti hogy a megnevezés mezőben az ELog rendszerben felvitt elemeket lehet kiválasztani.
+
+![](dvb_szerelveny_letrehozas_dialog_1.png)
+
+Minimum 2 karakter leütése után a rendszer felajánlja a beirt szöveghez legközelebb eső találatokat. A találatok JSON formátumban érkeznek a DVB rendszerből a `$szerelveny->jsonSzerelvenyek();` metóduson keresztül. 
+A megnevezés pontosabb megadása esetén a találati lista szűkül. 
+
+![](dvb_szerelveny_letrehozas_dialog_2.png)
+
+Amennyiben olyan szerelvényt kivánunk felvinni ami nem szerepel és nem is fog szerepelni az ELog-ban (egyedi szerelvény), akkor a `szerepel az adatbázisban` checkbox-ból a kiválasztást ki kell venni. Ebben az esetben meg kell adni a szerelvény megnevezését és mértékegységét.
+Ezek a szerelvények nem kerülnek átküldésre az ELog rendszerbe.
+
+![](dvb_szerelveny_letrehozas_dialog_3.png)
 
 ### Elemlista küldése
 
@@ -186,24 +201,31 @@ szinkronizálandó elemek listáját a következő formátumban:
 Egy adott gyártási elem a következőképp épül fel:
 
 ```xml
+
 <tem:Product>
     <tem:CompanyAbbr>B0120</tem:CompanyAbbr> <!-- Projekt neve - mindig B0120 -->
     <tem:Id>48809</tem:Id> <!-- Gyártási elem DVB azonosítója a gyartastervezes táblából -->
     <tem:ProjectCode>P22106</tem:ProjectCode> <!-- Projekt munkaszáma DVB azonosítója a gyartasjelentes táblából -->
     <tem:ElementCode>3629</tem:ElementCode> <!-- Elem jele a gyartasjelentes_elem táblából -->
-    <tem:ElementName>PILLÉR</tem:ElementName> <!-- Elem generált besorolása az elemjel első karakteréből. Besorolási táblázatot lejebb találod -->
+    <tem:ElementName>PILLÉR
+    </tem:ElementName> <!-- Elem generált besorolása az elemjel első karakteréből. Besorolási táblázatot lejebb találod -->
     <tem:ElementFullName>PILLÉR</tem:ElementFullName> <!-- Elem teljes neve a gyartasjelentes_elem táblából -->
     <tem:ProdPlanDate>2022-10-10</tem:ProdPlanDate> <!-- Elem gyártási ideje a gyartastervezes táblából -->
     <tem:Quantity>1</tem:Quantity> <!-- Ez mindig 1, mert egy fizikai kiöntött elemet jelez -->
-    <tem:ConcreteVU>1.17</tem:ConcreteVU> <!-- Elem betonszükséglete a gyartasjelentes_elem táblából a terfogat1 + terfogat2 értékek (van 2 féle betonból készülő elem is) -->
-    <tem:RebarsMU>0</tem:RebarsMU> <!-- Elem vasszükséglete. A betonacél modul számolja ki ami a betonacel.php fájlban található -->
+    <tem:ConcreteVU>1.17
+    </tem:ConcreteVU> <!-- Elem betonszükséglete a gyartasjelentes_elem táblából a terfogat1 + terfogat2 értékek (van 2 féle betonból készülő elem is) -->
+    <tem:RebarsMU>0
+    </tem:RebarsMU> <!-- Elem vasszükséglete. A betonacél modul számolja ki ami a betonacel.php fájlban található -->
     <tem:HaspMU>0</tem:HaspMU> <!-- Elem pászma felhasználása. A gyartasjelentes_elem táblában a paszma érték -->
 </tem:Product>
 
 ```
 
-A gyártásra ütemezett elemek szinkronizálása óránként egyszer történik. A háttérfolyamat belépési pontja a `$elog->checkLastSyncAndStart()` metódus (ugyanaz mint az cikkszám szinkronizációnak). A háttérben az `$elog->prepareAndSendElemLista()` metódusa, mely
-SQL utasítással lekéri az összes gyártásra ütemezett vagy 1 hónapnál nem régebben legyártott elemeket. Ezek segítségével összeállitja a SOAP kérést és elküldi az ELog rendszer felé. A válaszüzenetből kiolvassa, hogy mely elemek szinkronizálása nem sikerült és a felhasználói naplóba irja.
+A gyártásra ütemezett elemek szinkronizálása óránként egyszer történik. A háttérfolyamat belépési pontja
+a `$elog->checkLastSyncAndStart()` metódus (ugyanaz mint az cikkszám szinkronizációnak). A háttérben
+az `$elog->prepareAndSendElemLista()` metódusa, mely SQL utasítással lekéri az összes gyártásra ütemezett vagy 1
+hónapnál nem régebben legyártott elemeket. Ezek segítségével összeállitja a SOAP kérést és elküldi az ELog rendszer
+felé. A válaszüzenetből kiolvassa, hogy mely elemek szinkronizálása nem sikerült és a felhasználói naplóba irja.
 
 A szinkronizáció sikeressége/sikertelensége a felhasználói naplóban megtekinthető és a következő formátumban olvasható:
 
@@ -212,3 +234,68 @@ A szinkronizáció sikeressége/sikertelensége a felhasználói naplóban megte
 2022-09-23 20:25:23 - ELog: elem szinkronizáció befejeződött. Összesen: 465 db gyártási napló bejegyzés elküldve az ELog-ba.
 2022-09-23 20:25:15 - ELog: B0120-as projekt elemeinek szinkronizálása.
 ```
+
+### Elemszükséglet küldése
+
+Az elemszükségletet a következő formátumban kell küldeni:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/">
+    <soapenv:Header/>
+    <soapenv:Body>
+        <tem:MaterialRequirementsAdd>
+            <tem:ProductMaterialRequirementsAddRequest3>
+                <tem:Items>
+                    <tem:Item>
+                        <tem:ProductId>49194</tem:ProductId> <!-- DVB elem gyártási azonosítója - gyártástervezés tábla id mezője-->
+                        <tem:ProductPlace>dvb Kft._Szeged</tem:ProductPlace> <!-- gyártóhely -->
+                        <tem:StdTimeMinutes>0</tem:StdTimeMinutes> <!-- nincs definiálva -->
+                        <tem:Requirements> <!-- szerelvények -->
+                            <tem:Item>
+                                <tem:Id>38421</tem:Id> <!-- szerelvény dvb azonosítója, gyártásjelentés_elem_szerelvény tábla id mezője -->
+                                <tem:ItemId>33321</tem:ItemId> <!-- ELog azonosító -->
+                                <tem:Quantity>2</tem:Quantity> <!-- ELog-ban használt mértékegységben a mennyiség -->
+                            </tem:Item>
+                            <tem:Item>
+                                <tem:Id>38423</tem:Id>
+                                <tem:ItemId>1366</tem:ItemId>
+                                <tem:Quantity>9.8</tem:Quantity>
+                            </tem:Item>
+                            
+                            ...
+                            
+                        </tem:Requirements>
+                    </tem:Item>
+                    <tem:Item>
+                        <tem:ProductId>49181</tem:ProductId>
+                        <tem:ProductPlace>dvb Kft._Szeged</tem:ProductPlace>
+                        <tem:StdTimeMinutes>0</tem:StdTimeMinutes>
+                        <tem:Requirements>
+                            <tem:Item>
+                                <tem:Id>38382</tem:Id>
+                                <tem:ItemId>33321</tem:ItemId>
+                                <tem:Quantity>2</tem:Quantity>
+                            </tem:Item>
+                            <tem:Item>
+                                <tem:Id>38383</tem:Id>
+                                <tem:ItemId>1366</tem:ItemId>
+                                <tem:Quantity>9.8</tem:Quantity>
+                            </tem:Item>
+                            
+                            ...
+                            
+                        </tem:Requirements>
+                    </tem:Item>
+                    
+                    ...
+                    
+                </tem:Items>
+            </tem:ProductMaterialRequirementsAddRequest3>
+        </tem:MaterialRequirementsAdd>
+    </soapenv:Body>
+</soapenv:Envelope>
+```
+
+Az elemszükséglet küldése hasonló módon történik mint a gyártásra szánt elemek átküldése az előző fejezetben: minden órában, amennyiben már a gyártási elemeket átküldte a DVB rendszer a ELog rendszere felé, automatikusan indul a szinkronizáció a `$elog->checkLastSyncAndStart()` metóduson keresztül.
+A `prepareAndSendElemszukseglet()` metódus indul el a háttérben, mely összegyüjti a gyártásra szánt elemeket az aznapi dátumtól kezdődően, összegyüjti a szükséges szerelvényeket, melyekben van ELog cikkszáma és elküldi az ELog felé a fent megadott formátumban.
